@@ -1,0 +1,410 @@
+---
+title: "Problem Set 2"
+author: "Yiyun (Leo) Yao - yy3959 - (Recitation) 002"
+date: "Due Nov 10, 2023"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+header-includes: \usepackage{tikz}
+---
+
+This homework must be turned in on Brightspace by Nov. 10, 2023. It must be your own work, and your own work only -- you must not copy anyone's work, or allow anyone to copy yours. This extends to writing code. You may consult with others, but when you write up, you must do so alone.
+
+Your homework submission must be written and submitted using Rmarkdown. No handwritten solutions will be accepted. \textbf{No zip files will be accepted.} \textbf{Make sure we can read each line of code in the pdf document.} You should submit the following:
+
+1. A compiled PDF file named yourNetID\_solutions.pdf containing your solutions to the problems.
+
+2. A .Rmd file containing the code and text used to produce your compiled pdf named yourNetID\_solutions.Rmd.
+
+
+Note that math can be typeset in Rmarkdown in the same way as Latex. Please make sure your answers are clearly structured in the Rmarkdown file:
+
+1. Label each question part
+
+2. Do not include written answers as code comments.
+
+3. The code used to obtain the answer for each question part should accompany the written answer. Comment your code!
+
+
+\newpage 
+
+
+## Question 1 (Total: 50)
+In new democracies and post-conflict settings, Truth and Reconciliation Commissions (TRCs) are often
+tasked with investigating and reporting about wrongdoing in previous governments. Depending on the context, institutions such as TRCs are expected to reduce hostilities (e.g. racial hostilities) and promote peace.
+
+In 1995, South Africa’s new government formed a national TRC in the aftermath of apartheid. [Gibson 2004] uses survey data collected from 2000-2001 to examine whether this TRC promoted inter-racial reconciliation. The outcome of interest is respondent racial attitudes (as measured by the level of agreement with the prompt: "I find it difficult to understand the customs and ways of [the opposite racial group]".) The treatment is ``exposure to the TRC" as measured by the individual’s level of self-reported knowledge about the TRC.
+
+You will need to use the trc_data.dta file for this question. The relevant variables are:
+
+- RUSTAND - Outcome: respondent’s racial attitudes (higher values indicate greater agreement)
+- TRCKNOW - Treatment dummy (1 = if knows about the TRC, 0 = otherwise)
+- age - Respondent age (in 2001)
+- female - Respondent gender
+- wealth - Measure of wealth constructed based on asset ownership (assets are fridge, floor polisher,
+    vacuum cleaner, microwave oven, hi-fi, washing machine, telephone, TV, car)
+- religiosity - Self-reported religiosity (7 point scale)
+- ethsalience - Self-reported ethnic identification (4 point scale)
+- rcblack - Respondent is black
+- rcwhite - Respondent is white
+- rccol - Respondent is coloured (distinct multiracial ethnic group)
+- EDUC - Level of education (9 point scale)
+
+### Part a (15 points)
+
+Estimate the average treatment effect of TRC exposure on respondents’ racial attitudes under the assumption that TRC exposure is ignorable. Report a 95% confidence interval for your estimate and interpret your results. (Use robust standard errors throughout.)
+
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(haven)
+library(estimatr) # for lm with robust se : ?lm_robust()
+
+# Load in the TRC data (it's a STATA .dta so we use the haven package)
+TRC_data <- haven::read_dta("trc_data.dta")
+
+# subgroup: treated & control
+treated = TRC_data$RUSTAND[TRC_data$TRCKNOW == 1]
+control = TRC_data$RUSTAND[TRC_data$TRCKNOW == 0]
+# Point Estimate
+ateTRC <- mean(treated) - mean(control)
+# Standard Error
+seTRC <- sqrt(var(treated)/length(treated) + var(control)/length(control))
+# 95% CI
+ci95TRC <- c(ateTRC - qnorm(.975)*seTRC,
+              ateTRC + qnorm(.975)*seTRC)
+cat("Point estimate of ATE", ateTRC, "\n")
+cat("Standard error:", seTRC, "\n")
+cat("95% confidence interval:", ci95TRC, "\n")
+```
+The average treatment effect of TRC exposure on respondents’ racial attitudes is approximately -0.22, which indicates that exposure to TRC reduces level of agreement with the prompt. This can be seen from the fact that the control group has higher level of racial attitudes, which is equivalent to higher level of agreement. Therefore, from the average treatment effect, we can conclude that TRC exposure helps reduce racism. 
+
+The 95% confidence interval is from -0.305 to -0.131, which does not include 0 (the null hypothesis value for the ATE). We could reject the null hypothesis at a significance level $\alpha$ = 0.05. This implies that there is convincing evidence that the treatment has a statistically distinguishable effect. The rejection of the null hypothesis ensures that we are confident in our conclusion.
+
+### Part b (15 points)
+
+Examine whether exposed and nonexposed respondents differ on the full set of observed covariates using a series of balance tests. Briefly discuss, in which ways do exposed and nonexposed respondents differ?
+
+
+```{r}
+# Standardize the covariates
+TRC_data_Standardized <- TRC_data %>%
+mutate(age_std = age/sd(age),
+       female_std = female/sd(female),
+       wealth_std = wealth/sd(wealth),
+       religiosity_std = religiosity/sd(religiosity),
+       ethsalience_std = ethsalience/sd(ethsalience),
+       rcblack_std = rcblack/sd(rcblack),
+       rcwhite_std = rcwhite/sd(rcwhite),
+       rccol_std = rccol/sd(rccol),
+       EDUC_std = EDUC/sd(EDUC))
+
+# Balance between treated and control
+balance_table <- TRC_data_Standardized %>% group_by(TRCKNOW) %>%
+  summarize(age_std = mean(age_std),
+            female_std = mean(female_std),
+            wealth_std = mean(wealth_std),
+            religiosity_std = mean(religiosity_std),
+            ethsalience_std = mean(ethsalience_std),
+            rcblack_std = mean(rcblack_std),
+            rcwhite_std = mean(rcwhite_std),
+            rccol_std = mean(rccol_std),
+            EDUC_std = mean(EDUC_std))
+balance_table
+
+# Take the absolute differences
+abs_balance_diff <- abs(balance_table[1, 2:ncol(balance_table)] - 
+                          balance_table[2, 2:ncol(balance_table)])
+abs_balance_diff
+```
+We can see that none of the absolute differences are 0. So all covariates differ from exposed to nonexposed respondents. Specifically, respondents exposed to TRC are younger, more female, welathier, less religious, and more educated. 
+
+### Part c (10 points)
+
+Now assume that TRC exposure is conditionally ignorable given the set of observed covariates:
+
+1. Use a logistic regression model to estimate the propensity score for each observation. (For purposes of this question, do not include any interactions.)
+2. With this model, construct inverse propensity of treatment weights (IPTW) for each observation using the unstabilized weights.
+3. Use the propensity score to construct an IPW estimator and report the point estimate for the ATE.
+
+Use the following covariates: age, female, wealth, religiosity, ethsalience, rcblack, rcwhite, rccol, EDUC
+
+
+```{r}
+library(broom)
+# the logistic regression model to estimate the propensity score for each observation
+pscore_model <- glm(TRCKNOW ~ age + female + wealth + religiosity + 
+                      ethsalience + rcblack + rcwhite + rccol + EDUC, 
+                    data=TRC_data_Standardized, 
+                    family=binomial(link="logit"))
+tidy(pscore_model)
+
+# Get the propensity scores for each observation
+TRC_data_Standardized$e <- predict(pscore_model, type = "response")
+
+# Generate the weights (unstabilized)
+TRC_data_Standardized$wt <- NA
+TRC_data_Standardized$wt[TRC_data_Standardized$TRCKNOW == 1] <-
+  1/TRC_data_Standardized$e[TRC_data_Standardized$TRCKNOW==1]
+TRC_data_Standardized$wt[TRC_data_Standardized$TRCKNOW == 0] <-
+  1/(1 -TRC_data_Standardized$e[TRC_data_Standardized$TRCKNOW==0])
+point_wtd <-
+  mean(TRC_data_Standardized$wt * TRC_data_Standardized$RUSTAND *
+         TRC_data_Standardized$TRCKNOW - TRC_data_Standardized$wt *
+         TRC_data_Standardized$RUSTAND * (1-TRC_data_Standardized$TRCKNOW))
+point_wtd
+```
+
+### Part d (10 points)
+
+Using the bootstrap method (resampling individual rows of the data with replacement), obtain an estimate for the standard error of your IPTW estimator for the ATE. Compute a 95% confidence interval and interpret your findings. (You should report estimate, standard error, 95% CI lower, 95% CI upper, for interpretation, compare your results in Part C/D to your estimate from Part A and briefly discuss your findings.)
+
+
+```{r}
+# Set random seed
+set.seed(123)
+
+#IPTW Bootstrap
+n_iter <- 1000 # Suggested number of iterations
+ate_boot <- rep(NA, n_iter) # Placeholder to store estimates
+
+# For each iteration
+for(boot in 1:n_iter){
+  # Resample rows with replacement
+  TRC_boot <- TRC_data_Standardized[sample(1:nrow(TRC_data_Standardized),
+                                          nrow(TRC_data_Standardized),
+                                          replace=T),] #replace = T is key!
+  # Fit the propensity score model on the bootstrapped data
+  pscore_model_boot <- glm(TRCKNOW ~ age + female + wealth + religiosity +
+                             ethsalience + rcblack + rcwhite + rccol + EDUC,
+                           data=TRC_boot, family=binomial(link="logit"))
+  # Save the propensities
+  TRC_boot$e <- predict(pscore_model_boot, type = "response")
+  # Calculate the weights
+  TRC_boot$wt <- NA
+  TRC_boot$wt[TRC_boot$TRCKNOW == 1] <- 1/TRC_boot$e[TRC_boot$TRCKNOW==1]
+  TRC_boot$wt[TRC_boot$TRCKNOW == 0] <- 1/(1 - TRC_boot$e[TRC_boot$TRCKNOW==0])
+  # Compute and store the ATE
+  ate_boot[boot] <-
+    mean(TRC_boot$wt * TRC_boot$RUSTAND * TRC_boot$TRCKNOW -
+         TRC_boot$wt * TRC_boot$RUSTAND * (1-TRC_boot$TRCKNOW))
+}
+mean(ate_boot)
+
+# Take the SD of the ate_boot to get our estimated SE - can do asymptotic inference
+sd(ate_boot)
+
+# Asymptotic 95\% CI
+c(point_wtd - qnorm(.975)*sd(ate_boot),
+point_wtd + qnorm(.975)*sd(ate_boot))
+```
+The average of the ATE estimates obtained from the bootstrap resampling procedure is -0.16. In the bootstrap, each iteration of involves resampling the data, fitting a propensity score model, calculating weights, and then computing the ATE. The mean of these ATE estimates provides a point estimate at -0.16, which, like our estimate from Part A (-0.22), tells us exposure to TRC reduces agreement. The difference between the two values is caused by whether or not taking into account of variability and uncertainty.
+
+The standard error from the bootstrap is 0.045, very close to our results from Part A (0.044). And the 95% confidence interval is from -0.25 to -0.07. Like the previous one from Part A, it does not include 0, so we can reject the null and claim that the treatment has a statistically distinguishable effect. There's one difference that this new confidence interval result is closer to 0. 
+
+## Question 2 (Total: 50 points)
+
+Use the same data set as in Question 1.
+
+### Part a (15 points)
+
+Estimate the ATT of TRC exposure on respondents’ racial attitudes using the MatchIt approach. You can use the matchit function from MatchIt package in R. Implement the nearest neighbor matching algorithm and estimate the ATT. Report the 95% confidence interval of your estimate.
+
+```{r}
+library(MatchIt)
+# Read the help file first! Check out the default settings
+# ?matchit()
+library(estimatr)
+trc_m_nn <- matchit(TRCKNOW ~ age + female + wealth + religiosity +
+                           ethsalience + rcblack + rcwhite + rccol + EDUC, 
+                         data = TRC_data, method = "nearest",
+                         link ="logit", distance = "glm")
+# Checking balance after NN matching
+summary(trc_m_nn, un = FALSE)
+
+m_data_nn <- match.data(trc_m_nn)
+treated_nn <- m_data_nn$RUSTAND[m_data_nn$TRCKNOW == 1]
+control_nn <- m_data_nn$RUSTAND[m_data_nn$TRCKNOW == 0]
+# Point Estimate
+ate_nn <- mean(treated_nn) - mean(control_nn)
+cat("Point estimate of ATE", ate_nn, "\n")
+# Standard Error
+se_nn <- sqrt(var(treated_nn)/length(treated_nn) +
+                var(control_nn)/length(control_nn))
+cat("Standard error:", se_nn, "\n")
+# 95% CI
+ci95_nn <- c(ate_nn - qnorm(.975)*se_nn, ate_nn + qnorm(.975)*se_nn)
+cat("95% confidence interval:", ci95_nn, "\n")
+```
+The 95% confidence interval [-0.3054404, -0.1226347] does not include 0, so we could reject the null hypothesis and claim that the treatment has statistically distinguishable effect.
+
+### Part b (15 points)
+
+Estimate the ATT of TRC exposure on respondents’ racial attitudes using the MatchIt approach. You can use the matchit function from MatchIt package in R. Implement the exact matching algorithm and estimate the ATT. Report the 95% confidence interval of your estimate.
+
+```{r}
+trc_m_exa <- matchit(TRCKNOW ~ age + female + wealth + religiosity 
+                     + ethsalience + rcblack + rcwhite + rccol + EDUC,
+                     data = TRC_data, method = "exact", distance = "glm")
+summary(trc_m_exa, un = FALSE)
+m_data_exa <- match.data(trc_m_exa)
+treated_exa <- m_data_exa$RUSTAND[m_data_exa$TRCKNOW == 1]
+control_exa <- m_data_exa$RUSTAND[m_data_exa$TRCKNOW == 0]
+# Point Estimate
+ate_exa <- mean(treated_exa) - mean(control_exa)
+cat("Point estimate of ATE", ate_exa, "\n")
+# Standard Error
+se_exa <- sqrt(var(treated_exa)/length(treated_exa) +
+                var(control_exa)/length(control_exa))
+cat("Standard error:", se_exa, "\n")
+# 95% CI
+ci95_exa <- c(ate_exa - qnorm(.975)*se_exa, ate_exa + qnorm(.975)*se_exa)
+cat("95% confidence interval:", ci95_exa, "\n")
+```
+The 95% confidence interval [-0.2490687, 0.4625074] includes 0. Therefore, we could not reject the null hypothesis and we do not have convincing evidence that the treatment has statistically distinguishable effect.
+
+### Part c (10 points)
+
+Estimate the ATT of TRC exposure on respondents’ racial attitudes using the MatchIt approach. You can use the matchit function from MatchIt package in R. Implement the \textbf{coarsened exact matching} algorithm and estimate the ATT. Report the 95% confidence interval of your estimate.
+
+```{r}
+trc_m_cem <- matchit(TRCKNOW ~ age + female + wealth + religiosity + 
+                       ethsalience + rcblack + rcwhite + rccol + EDUC, 
+                     data = TRC_data, method = "cem", distance = "glm")
+summary(trc_m_cem, un = FALSE)
+m_data_cem <- match.data(trc_m_cem)
+treated_cem <- m_data_cem$RUSTAND[m_data_cem$TRCKNOW == 1]
+control_cem <- m_data_cem$RUSTAND[m_data_cem$TRCKNOW == 0]
+# Point Estimate
+ate_cem <- mean(treated_cem) - mean(control_cem)
+cat("Point estimate of ATE", ate_cem, "\n")
+# Standard Error
+se_cem <- sqrt(var(treated_cem)/length(treated_cem) +
+                var(control_cem)/length(control_cem))
+cat("Standard error:", se_cem, "\n")
+# 95% CI
+ci95_cem <- c(ate_cem - qnorm(.975)*se_cem, ate_cem + qnorm(.975)*se_cem)
+cat("95% confidence interval:", ci95_cem, "\n")
+```
+The 95% confidence interval [-0.2612432, -0.01385421] does not include 0, so we could reject the null hypothesis and claim that the treatment has statistically distinguishable effect.
+
+### part d (10 points)
+
+Compare and contrast the three different matching algorithms. Provide evidence and an argument about which one we should use.
+
+Exact matching algorithm is a strong matching method for its distribution is exactly the same for treated and matched controls. However, the weakness of exact matching regarding is its sample size. For exact matching algorithm, there are only 92 respondents matched in the control group and 88 in the treated. On the other hand, for coarsened exact matching, we have 802 respondents matched in the control group and 726 in the treated, and for nearest neighbor matching algorithm, there are only 327 unmatched respondents left in the control group. The sample size is too small for the exact matching algorithm, comparing to the other two algorithms, to get a good estimate. Nearest neighbor matching algorithm is good at reducing bias because it's constantly making the closest matches. However,it might also cause uncertainty. Personally, I would use coarsened exact matching as it is a balance of the exact matching algorithm and nearest neighbor matching algorithm.
+
+## BONUS ONLY: Question 3 (Total: Up to +12)
+Question 3 is for bonus points. (See forthcoming lecture on Nov. 7th)
+
+### part a (+4 points)
+Using the regression method to predict potential outcomes for all individuals in the dataset and calculate the ATE with bootstrapped standard errors. Report and interpret your results. (Hint: Start by fitting the treatment and control model with subsets of the data.)
+```{r}
+
+## Fit a model among TRCKNOW == 1 to get E[Y_i(1) | X]
+treatment_model <- lm_robust(RUSTAND ~ age + female + wealth + religiosity
+                             + ethsalience + rcblack + rcwhite + rccol + EDUC,
+                             data=subset(TRC_data, TRCKNOW == 1))
+
+## Fit a model among TRCKNOW == 0 to get E[Y_i(0) | X]
+control_model <- lm_robust(RUSTAND ~ age + female + wealth + religiosity
+                             + ethsalience + rcblack + rcwhite + rccol + EDUC,
+                             data=subset(TRC_data, TRCKNOW == 0))
+
+## Predict the potential outcome under treatment for all units
+TRC_data$RUSTAND_treated <- predict(treatment_model, newdata = TRC_data)
+
+## Predict the potential outcome under control for all units
+TRC_data$RUSTAND_control <- predict(control_model, newdata = TRC_data)
+
+## Average of the differences
+ate_reg = mean(TRC_data$RUSTAND_treated - TRC_data$RUSTAND_control)
+cat("Average of the differences:", ate_reg, "\n")
+
+### Bootstrap for SEs
+set.seed(123)
+nBoot <- 2000 # Number of iterations
+boot_results <- rep(NA, nBoot)
+for (i in 1:nBoot){
+  # Resample with replacement
+  TRC_data_boot <- TRC_data[sample(1:nrow(TRC_data), nrow(TRC_data), replace=T),]
+  # Fit a model among TRCKNOW == 1 to get E[Y_i(1) | X]
+  treatment_model_boot <- lm_robust(RUSTAND ~ age + female + wealth 
+                                    + religiosity + ethsalience + rcblack 
+                                    + rcwhite + rccol + EDUC, 
+                                    data=subset(TRC_data_boot, TRCKNOW==1))
+  # Fit a model among TRCKNOW == 0 to get E[Y_i(0) | X]
+  control_model_boot <- lm_robust(RUSTAND ~ age + female + wealth 
+                                  + religiosity + ethsalience + rcblack 
+                                  + rcwhite + rccol + EDUC,
+                                  data=subset(TRC_data_boot, TRCKNOW==0))
+  # Predict the potential outcome under treatment for all units
+  TRC_data_boot$RUSTAND_treated_boot <- predict(treatment_model_boot, 
+                                                newdata = TRC_data_boot)
+  # Predict the potential outcome under control for all units
+  TRC_data_boot$RUSTAND_control_boot <- predict(control_model_boot, 
+                                                newdata = TRC_data_boot)
+  # Store bootstrapped estimate
+  boot_results[i] <- mean(TRC_data_boot$RUSTAND_treated_boot -
+                            TRC_data_boot$RUSTAND_control_boot)
+}
+
+# ATE
+mean(boot_results)
+
+# Take the SD of the ate_boot to get our estimated SE - can do asymptotic inference
+sd(boot_results)
+```
+The ATE of TRC exposure is approximately -0.17, which means exposure reduces agreement. The control group has higher level of agreement. The TRC exposure reduces racism. The standard error is approximately 0.045.
+
+### part b (+4 points)
+Using the regression method to predict potential outcomes for all individuals and calculate the ATT with bootstrapped standard errors. Report and interpret your results. 
+
+```{r}
+ATT_reg = mean(TRC_data$RUSTAND_treated[TRC_data$TRCKNOW == 1]-
+TRC_data$RUSTAND_control[TRC_data$TRCKNOW == 1])
+ATT_reg
+
+### Bootstrap for SEs
+set.seed(123)
+nBoot <- 2000 # Number of iterations
+boot_results_ATT <- rep(NA, nBoot)
+for (iter in 1:nBoot){
+  # Resample w/ replacement
+  TRC_ATT_boot <- TRC_data[sample(1:nrow(TRC_data), nrow(TRC_data), replace=T),]
+  ## Fit a model among TRCKNOW == 1 to get E[Y_i(1) | X]
+  treatment_ATT_boot <- lm_robust(RUSTAND ~ age + female + wealth + religiosity
+                                  + ethsalience + rcblack + rcwhite + rccol + EDUC,
+                                  data=subset(TRC_ATT_boot, TRCKNOW==1))
+  ## Fit a model among TRCKNOW == 0 to get E[Y_i(0) | X]
+  control_model_boot <- lm_robust(RUSTAND ~ age + female + wealth + religiosity
+                                  + ethsalience + rcblack + rcwhite + rccol + EDUC,
+                                  data=subset(TRC_ATT_boot, TRCKNOW==0))
+  ## Predict the potential outcome under treatment for all units
+  TRC_ATT_boot$RUSTAND_treated_boot <- predict(treatment_ATT_boot, 
+                                               newdata = TRC_ATT_boot)
+  ## Predict the potential outcome under control for all units
+  TRC_ATT_boot$RUSTAND_control_boot <- predict(control_model_boot, 
+                                               newdata = TRC_ATT_boot)
+  ## Store bootstrapped estimate
+  boot_results_ATT[iter] <- mean(TRC_ATT_boot$RUSTAND_treated_boot[TRC_ATT_boot$TRCKNOW==1] 
+                                 - TRC_ATT_boot$RUSTAND_control_boot[TRC_ATT_boot$TRCKNOW==1])
+}
+
+### ATT
+mean(boot_results_ATT)
+
+### Standard error
+sd(boot_results_ATT)
+```
+The ATE of TRC exposure is approximately -0.20, which means exposure reduces agreement. The control group has higher level of agreement. The TRC exposure reduces racism. The standard error is approximately 0.046.
+
+### part c (+4 points) 
+
+Compare and contrast the ATE and ATT from the regression approach. 
+
+ATE has an average of differences of -0.17 with a standard error of 0.045. ATT has an average of differences of -0.20 with a standard error of 0.046. There is a 0.03 difference in the average of differences and a 0.001 difference in the standard errors.  we could see that the coefficient of ATE and ATT is relatively different, and the standard errors of ATE and ATT is relatively similar. 
+
+The difference between ATT and ATE exist because ATE is the average of the individual
+treatment effects of the population, where we examine the difference between the effect of the treated and control group, whereas ATT is the average of the individual treatment effects of the treated. We know that standard deviation is an indicator of variability between observations. Thus, the similarity is probably caused by the fact that we are using the same dataset when estimating ATE and ATT.
